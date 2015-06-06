@@ -34,6 +34,7 @@ func main() {
 
 func loop() {
 	for {
+		fmt.Println("=======================")
 		fmt.Println("What do you want to do?")
 		fmt.Println("[q] Quit?")
 		fmt.Println("[a] Play some audio (plays audio.mp3)")
