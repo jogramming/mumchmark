@@ -119,9 +119,10 @@ func spawnClient(user, server string) {
 	client := gumble.NewClient(&config)
 
 	client.Attach(gumbleutil.Listener{
-		TextMessage: textMessageHandler,
-		Connect:     connectHandler,
-		Disconnect:  dcHandler,
+		TextMessage:   textMessageHandler,
+		Connect:       connectHandler,
+		Disconnect:    dcHandler,
+		ChannelChange: channelChangeHandler,
 	})
 
 	err := client.Connect()
