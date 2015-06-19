@@ -22,7 +22,7 @@ var (
 func main() {
 	flag.Parse()
 	for i := 0; i < *numClient; i++ {
-		spawnClient(fmt.Sprintf("Mumchmark bot %d", i), *addr)
+		spawnClient(fmt.Sprintf("Mumchmark%d", i), *addr)
 	}
 
 	loop()
