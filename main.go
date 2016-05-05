@@ -7,22 +7,30 @@ import (
 	"flag"
 	"fmt"
 	"github.com/layeh/gumble/gumble"
-	"github.com/layeh/gumble/gumble_ffmpeg"
+	"github.com/layeh/gumble/gumbleffmpeg"
 	"github.com/layeh/gumble/gumbleutil"
+	_ "github.com/layeh/gumble/opus"
 	"log"
+	"net"
 )
 
 var (
 	clients    []*gumble.Client
 	numClient  = flag.Int("clients", 10, "Number of clients to spawn")
 	addr       = flag.String("address", "localhost:64738", "Address of the mumble server")
+	password   = flag.String("pw", "", "Password to connect with")
 	curChannel = uint32(0)
 )
 
 func main() {
 	flag.Parse()
+
 	for i := 0; i < *numClient; i++ {
-		spawnClient(fmt.Sprintf("Mumchmark%d", i), *addr)
+		err := spawnClient(fmt.Sprintf("Mumchmark_%d", i), *password, *addr)
+		if err != nil {
+			fmt.Printf("Failed to connect to server %q: %s\n", *addr, err.Error())
+			return
+		}
 	}
 
 	loop()
@@ -70,10 +78,10 @@ func inputAmount() (int, bool) {
 }
 
 func sendText() {
-	fmt.Println("What should the messade be? (leave empty for \"testing\"")
+	fmt.Println("What should the message be? (leave empty for \"testing\"")
 	str := "testing"
 	fmt.Scanln(&str)
-	fmt.Printf("Message set to \"%s\" How may clients should send this? leave empty for %d\n", str, len(clients))
+	fmt.Printf("Message set to %q, How may clients should send this? leave empty for %d\n", str, len(clients))
 
 	num, ok := inputAmount()
 	if !ok {
@@ -96,8 +104,7 @@ func playAudio() {
 
 	for i := 0; i < num; i++ {
 		client := clients[i]
-		ff := gumble_ffmpeg.New(client)
-		ff.Source = gumble_ffmpeg.SourceFile("audio.mp3")
+		ff := gumbleffmpeg.New(client, gumbleffmpeg.SourceFile("audio.mp3"))
 		err := ff.Play()
 		if err != nil {
 			log.Println("Error playing audio: ", err)
@@ -105,33 +112,32 @@ func playAudio() {
 	}
 }
 
-func spawnClient(user, server string) {
-	tlsConfig := tls.Config{
+func spawnClient(user, pw, server string) error {
+	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
 	}
 
-	config := gumble.Config{
-		Username:  user,
-		Address:   server,
-		TLSConfig: tlsConfig,
+	config := &gumble.Config{
+		Username:       user,
+		Password:       pw,
+		AudioInterval:  gumble.AudioDefaultInterval,
+		AudioDataBytes: gumble.AudioDefaultDataBytes,
 	}
 
-	client := gumble.NewClient(&config)
-
-	client.Attach(gumbleutil.Listener{
+	config.Attach(gumbleutil.Listener{
 		TextMessage:   textMessageHandler,
 		Connect:       connectHandler,
 		Disconnect:    dcHandler,
 		ChannelChange: channelChangeHandler,
 	})
-
-	err := client.Connect()
+	client, err := gumble.DialWithDialer(new(net.Dialer), server, config, tlsConfig)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	clients = append(clients, client)
-	log.Println("spawned a client to server", server)
+	log.Printf("mumchmark user %q Connected to server %q!\n", user, server)
+	return nil
 }
 
 func textMessageHandler(msg *gumble.TextMessageEvent) {
@@ -139,7 +145,11 @@ func textMessageHandler(msg *gumble.TextMessageEvent) {
 }
 
 func connectHandler(c *gumble.ConnectEvent) {
-	fmt.Println("Connected to server, welcome message: ", c.WelcomeMessage)
+	msg := "(none)"
+	if c.WelcomeMessage != nil {
+		msg = *c.WelcomeMessage
+	}
+	fmt.Printf("Connected to server, welcome message: %q\n", msg)
 }
 
 func dcHandler(c *gumble.DisconnectEvent) {
